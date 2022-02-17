@@ -43,32 +43,28 @@ async fn default_handle(_req: Request<Body>) ->  Result<Response, Infallible> {
     Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
 }
 
-pub async fn run_service(
-    addr: SocketAddr,
-    rx: Receiver<()>,
-    handlers: Arc<Mutex<Queue<HandlerCallback>>>
-) -> impl Future<Output = Result<(), hyper::Error>> {
+pub async fn run_service(addr: SocketAddr, rx: Receiver<()>,
+    handlers: Arc<Mutex<Queue<HandlerCallback>>>) -> impl Future<Output = Result<(), hyper::Error>> {
+
     let new_service = make_service_fn(move |_| {
         let cloned_handlers = handlers.clone();
         async {
             Ok::<_, Error>(service_fn(move |req| {
-                if let Ok(mut handlers_rw) = cloned_handlers.lock() {
-                    if let Ok(handler) = handlers_rw.remove() {
-                        handler(req)
-                    } else {
-                        Box::pin(default_handle(req))
+                match cloned_handlers.lock() {
+                    Ok(mut handlers_rw) => {
+                        match handlers_rw.remove() {
+                            Ok(handler) => { handler(req) }
+                            Err(_err) => { Box::pin(default_handle(req)) }
+                        }
                     }
-                } else {
-                    Box::pin(default_handle(req))
+                    Err(_err_lock) => Box::pin(default_handle(req))
                 }
             }))
         }
     });
     let server = Server::bind(&addr).serve(new_service);
 
-    server.with_graceful_shutdown(async {
-        rx.await.ok();
-    })
+    server.with_graceful_shutdown(async { rx.await.ok(); })
 }
 
 #[async_trait::async_trait]
