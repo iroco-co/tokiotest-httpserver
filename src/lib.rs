@@ -11,6 +11,8 @@ use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
+use std::sync::Arc;
+use futures::future::BoxFuture;
 
 pub type Response = hyper::Response<hyper::Body>;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -40,12 +42,14 @@ async fn handle(_req: Request<Body>) ->  Result<Response, Infallible> {
 
 pub async fn run_service(
     addr: SocketAddr,
-    rx: Receiver<()>
+    rx: Receiver<()>,
+    handle: Arc<dyn Fn(Request<Body>) -> BoxFuture<'static, Result<Response, Infallible>> + Send + Sync>
 ) -> impl Future<Output = Result<(), hyper::Error>> {
     let new_service = make_service_fn(move |_| {
+        let cloned_handle = Arc::clone(&handle);
         async {
             Ok::<_, Error>(service_fn(move |req| {
-                handle(req)
+                cloned_handle(req)
             }))
         }
     });
@@ -62,7 +66,7 @@ impl AsyncTestContext for HttpTestContext {
         let port = take_port();
         let addr = SocketAddr::new("127.0.0.1".parse().unwrap(), port);
         let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
-        let server_handler = tokio::spawn(run_service(addr, receiver).await);
+        let server_handler = tokio::spawn(run_service(addr, receiver, Arc::new(|req: Request<Body>| {Box::pin(handle(req))}) ).await);
         let client = Client::new();
         HttpTestContext {
             client,
