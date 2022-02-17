@@ -124,4 +124,21 @@ mod test {
 
         assert_eq!(404, resp.status());
     }
+
+    #[test_context(HttpTestContext)]
+    #[tokio::test]
+    async fn test_get_endpoint(ctx: &mut HttpTestContext) {
+        let uri = format!("http://{}:{}/foo", "localhost", ctx.port).parse::<Uri>().unwrap();
+        ctx.handlers.lock().unwrap().add(Arc::new(|req: Request<Body>| { Box::pin(async move {
+            if req.uri().path().eq("/foo") {
+                Ok(hyper::Response::builder().status(StatusCode::OK).body(Body::empty()).unwrap())
+            } else {
+                Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
+            }
+        })})).unwrap();
+
+        let resp = ctx.client.get(uri).await.unwrap();
+
+        assert_eq!(200, resp.status());
+    }
 }
