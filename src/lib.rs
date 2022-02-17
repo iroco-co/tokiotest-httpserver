@@ -16,6 +16,7 @@ use futures::future::BoxFuture;
 
 pub type Response = hyper::Response<hyper::Body>;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+pub type HandlerCallback = Arc<dyn Fn(Request<Body>) -> BoxFuture<'static, Result<Response, Infallible>> + Send + Sync>;
 
 lazy_static! {
     static ref PORTS: Mutex<BinaryHeap<u16>> = Mutex::new(BinaryHeap::from((12300u16..12400u16).collect::<Vec<u16>>()));
@@ -43,7 +44,7 @@ async fn handle(_req: Request<Body>) ->  Result<Response, Infallible> {
 pub async fn run_service(
     addr: SocketAddr,
     rx: Receiver<()>,
-    handle: Arc<dyn Fn(Request<Body>) -> BoxFuture<'static, Result<Response, Infallible>> + Send + Sync>
+    handle: HandlerCallback
 ) -> impl Future<Output = Result<(), hyper::Error>> {
     let new_service = make_service_fn(move |_| {
         let cloned_handle = Arc::clone(&handle);
