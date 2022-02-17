@@ -13,6 +13,7 @@ use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::sync::Arc;
 use futures::future::BoxFuture;
+use queues::{Queue, IsQueue, queue};
 
 pub type Response = hyper::Response<hyper::Body>;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -34,23 +35,32 @@ struct HttpTestContext {
     client: Client<HttpConnector<GaiResolver>, Body>,
     server_handler: JoinHandle<Result<(), hyper::Error>>,
     sender: Sender<()>,
-    port: u16
+    port: u16,
+    handlers: Arc<Mutex<Queue<HandlerCallback>>>
 }
 
-async fn handle(_req: Request<Body>) ->  Result<Response, Infallible> {
+async fn default_handle(_req: Request<Body>) ->  Result<Response, Infallible> {
     Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
 }
 
 pub async fn run_service(
     addr: SocketAddr,
     rx: Receiver<()>,
-    handle: HandlerCallback
+    handlers: Arc<Mutex<Queue<HandlerCallback>>>
 ) -> impl Future<Output = Result<(), hyper::Error>> {
     let new_service = make_service_fn(move |_| {
-        let cloned_handle = Arc::clone(&handle);
+        let cloned_handlers = handlers.clone();
         async {
             Ok::<_, Error>(service_fn(move |req| {
-                cloned_handle(req)
+                if let Ok(mut handlers_rw) = cloned_handlers.lock() {
+                    if let Ok(handler) = handlers_rw.remove() {
+                        handler(req)
+                    } else {
+                        Box::pin(default_handle(req))
+                    }
+                } else {
+                    Box::pin(default_handle(req))
+                }
             }))
         }
     });
@@ -67,13 +77,15 @@ impl AsyncTestContext for HttpTestContext {
         let port = take_port();
         let addr = SocketAddr::new("127.0.0.1".parse().unwrap(), port);
         let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
-        let server_handler = tokio::spawn(run_service(addr, receiver, Arc::new(|req: Request<Body>| {Box::pin(handle(req))}) ).await);
+        let handlers: Arc<Mutex<Queue<HandlerCallback>>> = Arc::new(Mutex::new(queue![]));
+        let server_handler = tokio::spawn(run_service(addr, receiver, handlers.clone()).await);
         let client = Client::new();
         HttpTestContext {
             client,
             server_handler,
             sender,
-            port
+            port,
+            handlers
         }
     }
 
@@ -86,9 +98,11 @@ impl AsyncTestContext for HttpTestContext {
 
 #[cfg(test)]
 mod test {
-    use hyper::Uri;
-    use crate::HttpTestContext;
+    use hyper::{Uri, Request, Body, StatusCode};
+    use crate::{HttpTestContext};
     use test_context::test_context;
+    use queues::IsQueue;
+    use std::sync::Arc;
 
     #[test_context(HttpTestContext)]
     #[tokio::test]
@@ -96,5 +110,18 @@ mod test {
         let uri = format!("http://{}:{}", "localhost", ctx.port).parse::<Uri>().unwrap();
         let resp = ctx.client.get(uri).await.unwrap();
         assert_eq!(500, resp.status());
+    }
+
+    #[test_context(HttpTestContext)]
+    #[tokio::test]
+    async fn test_get_respond_404(ctx: &mut HttpTestContext) {
+        let uri = format!("http://{}:{}", "localhost", ctx.port).parse::<Uri>().unwrap();
+        ctx.handlers.lock().unwrap().add(Arc::new(|_req: Request<Body>| { Box::pin(async {
+            Ok(hyper::Response::builder().status(StatusCode::NOT_FOUND).body(Body::empty()).unwrap())
+        })})).unwrap();
+
+        let resp = ctx.client.get(uri).await.unwrap();
+
+        assert_eq!(404, resp.status());
     }
 }
