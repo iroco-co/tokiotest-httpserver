@@ -89,7 +89,7 @@ impl AsyncTestContext for HttpTestContext {
 
 #[cfg(test)]
 mod test {
-    use hyper::{Uri, StatusCode};
+    use hyper::{Uri, StatusCode, Method, Request, Body};
     use crate::{HttpTestContext};
     use test_context::test_context;
     use queues::IsQueue;
@@ -121,6 +121,25 @@ mod test {
         ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/foo").status_code(StatusCode::OK).build()).unwrap();
 
         let resp = ctx.client.get(uri).await.unwrap();
+
+        assert_eq!(200, resp.status());
+    }
+
+    #[test_context(HttpTestContext)]
+    #[tokio::test]
+    async fn test_post_endpoint(ctx: &mut HttpTestContext) {
+        let uri = format!("http://{}:{}/bar", "localhost", ctx.port).parse::<Uri>().unwrap();
+        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/bar")
+            .status_code(StatusCode::OK)
+            .method(Method::POST).build()).unwrap();
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .body(Body::from("foo=bar"))
+            .expect("request builder");
+
+        let resp = ctx.client.request(req).await.unwrap();
 
         assert_eq!(200, resp.status());
     }

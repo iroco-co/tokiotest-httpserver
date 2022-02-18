@@ -37,8 +37,9 @@ impl HandlerBuilder {
         let Self { path, method, status_code } = self;
         Arc::new(move |req: Request<Body>| {
             let cloned_path = path.clone();
+            let cloned_method = method.clone();
             Box::pin(async move {
-                if req.uri().path().eq(cloned_path.as_str()) {
+                if req.uri().path().eq(cloned_path.as_str()) && req.method().eq(&cloned_method) {
                     Ok(hyper::Response::builder().status(status_code).body(Body::empty()).unwrap())
                 } else {
                     Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
