@@ -1,3 +1,5 @@
+mod handler;
+
 use std::collections::BinaryHeap;
 use std::convert::Infallible;
 use std::future::Future;
@@ -5,7 +7,7 @@ use std::net::{SocketAddr};
 use test_context::AsyncTestContext;
 use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::task::JoinHandle;
-use hyper::{Body, Client, Request, Server, StatusCode};
+use hyper::{Body, Client, Method, Request, Server, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
@@ -14,10 +16,10 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use futures::future::BoxFuture;
 use queues::{Queue, IsQueue, queue};
+use crate::handler::{default_handle, HandlerCallback};
 
 pub type Response = hyper::Response<hyper::Body>;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
-pub type HandlerCallback = Arc<dyn Fn(Request<Body>) -> BoxFuture<'static, Result<Response, Infallible>> + Send + Sync>;
 
 lazy_static! {
     static ref PORTS: Mutex<BinaryHeap<u16>> = Mutex::new(BinaryHeap::from((12300u16..12400u16).collect::<Vec<u16>>()));
@@ -37,10 +39,6 @@ struct HttpTestContext {
     sender: Sender<()>,
     port: u16,
     handlers: Arc<Mutex<Queue<HandlerCallback>>>
-}
-
-async fn default_handle(_req: Request<Body>) ->  Result<Response, Infallible> {
-    Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
 }
 
 pub async fn run_service(addr: SocketAddr, rx: Receiver<()>,
