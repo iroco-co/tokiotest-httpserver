@@ -1,24 +1,21 @@
 mod handler;
 
 use std::collections::BinaryHeap;
-use std::convert::Infallible;
 use std::future::Future;
 use std::net::{SocketAddr};
 use test_context::AsyncTestContext;
 use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::task::JoinHandle;
-use hyper::{Body, Client, Method, Request, Server, StatusCode};
+use hyper::{Body, Client, Server, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 use std::sync::Arc;
-use futures::future::BoxFuture;
 use queues::{Queue, IsQueue, queue};
 use crate::handler::{default_handle, HandlerCallback};
 
-pub type Response = hyper::Response<hyper::Body>;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 lazy_static! {
@@ -92,11 +89,11 @@ impl AsyncTestContext for HttpTestContext {
 
 #[cfg(test)]
 mod test {
-    use hyper::{Uri, Request, Body, StatusCode};
+    use hyper::{Uri, StatusCode};
     use crate::{HttpTestContext};
     use test_context::test_context;
     use queues::IsQueue;
-    use std::sync::Arc;
+    use crate::handler::HandlerBuilder;
 
     #[test_context(HttpTestContext)]
     #[tokio::test]
@@ -109,10 +106,8 @@ mod test {
     #[test_context(HttpTestContext)]
     #[tokio::test]
     async fn test_get_respond_404(ctx: &mut HttpTestContext) {
-        let uri = format!("http://{}:{}", "localhost", ctx.port).parse::<Uri>().unwrap();
-        ctx.handlers.lock().unwrap().add(Arc::new(|_req: Request<Body>| { Box::pin(async {
-            Ok(hyper::Response::builder().status(StatusCode::NOT_FOUND).body(Body::empty()).unwrap())
-        })})).unwrap();
+        let uri = format!("http://{}:{}/unknown", "localhost", ctx.port).parse::<Uri>().unwrap();
+        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/unknown").status_code(StatusCode::NOT_FOUND).build()).unwrap();
 
         let resp = ctx.client.get(uri).await.unwrap();
 
@@ -123,13 +118,7 @@ mod test {
     #[tokio::test]
     async fn test_get_endpoint(ctx: &mut HttpTestContext) {
         let uri = format!("http://{}:{}/foo", "localhost", ctx.port).parse::<Uri>().unwrap();
-        ctx.handlers.lock().unwrap().add(Arc::new(|req: Request<Body>| { Box::pin(async move {
-            if req.uri().path().eq("/foo") {
-                Ok(hyper::Response::builder().status(StatusCode::OK).body(Body::empty()).unwrap())
-            } else {
-                Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
-            }
-        })})).unwrap();
+        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/foo").status_code(StatusCode::OK).build()).unwrap();
 
         let resp = ctx.client.get(uri).await.unwrap();
 

@@ -34,9 +34,17 @@ impl HandlerBuilder {
     }
 
     pub fn build(self) -> HandlerCallback {
-        Arc::new(|req: Request<Body>| { Box::pin(async move {
-            Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
-        })})
+        let Self { path, method, status_code } = self;
+        Arc::new(move |req: Request<Body>| {
+            let cloned_path = path.clone();
+            Box::pin(async move {
+                if req.uri().path().eq(cloned_path.as_str()) {
+                    Ok(hyper::Response::builder().status(status_code).body(Body::empty()).unwrap())
+                } else {
+                    Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
+                }
+            })
+        })
     }
 }
 
