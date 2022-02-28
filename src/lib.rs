@@ -89,7 +89,7 @@ impl AsyncTestContext for HttpTestContext {
 
 #[cfg(test)]
 mod test {
-    use hyper::{Uri, StatusCode, Method, Request, Body};
+    use hyper::{Uri, StatusCode, Method, Request, Body, HeaderMap};
     use crate::{HttpTestContext};
     use test_context::test_context;
     use queues::IsQueue;
@@ -120,8 +120,27 @@ mod test {
         let uri = format!("http://{}:{}/foo", "localhost", ctx.port).parse::<Uri>().unwrap();
         ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/foo").status_code(StatusCode::OK).build()).unwrap();
 
-        let resp = ctx.client.get(uri).await.unwrap();
+        let resp = ctx.client.get(uri.clone()).await.unwrap();
+        assert_eq!(200, resp.status());
 
+        let resp = ctx.client.get(uri.clone()).await.unwrap();
+        assert_eq!(500, resp.status());
+    }
+
+    #[test_context(HttpTestContext)]
+    #[tokio::test]
+    async fn test_get_with_headers(ctx: &mut HttpTestContext) {
+        let uri = format!("http://{}:{}/headers", "localhost", ctx.port).parse::<Uri>().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.append("foo", "bar".parse().unwrap());
+        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers.clone()).build()).unwrap();
+        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers).build()).unwrap();
+
+        let resp = ctx.client.get(uri.clone()).await.unwrap();
+        assert_eq!(500, resp.status());
+
+        let req = Request::builder().method(Method::GET).uri(uri.clone()).header("foo", "bar").body(Body::empty()).unwrap();
+        let resp = ctx.client.request(req).await.unwrap();
         assert_eq!(200, resp.status());
     }
 

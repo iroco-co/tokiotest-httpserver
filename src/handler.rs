@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 use futures::future::BoxFuture;
-use hyper::{Body, Method, Request};
+use hyper::{Body, HeaderMap, Method, Request};
 use crate::StatusCode;
 
 pub type Response = hyper::Response<hyper::Body>;
@@ -11,6 +11,7 @@ pub type HandlerCallback = Arc<dyn Fn(Request<hyper::Body>) -> BoxFuture<'static
 pub struct HandlerBuilder {
     path: String,
     method: Method,
+    headers: HeaderMap,
     status_code: StatusCode
 }
 
@@ -19,6 +20,7 @@ impl HandlerBuilder {
         HandlerBuilder {
             path: String::from(path),
             method: Method::GET,
+            headers: HeaderMap::new(),
             status_code: StatusCode::INTERNAL_SERVER_ERROR
         }
     }
@@ -33,19 +35,35 @@ impl HandlerBuilder {
         self
     }
 
+    pub fn headers(mut self, headers: HeaderMap) -> HandlerBuilder {
+        self.headers = headers;
+        self
+    }
+
     pub fn build(self) -> HandlerCallback {
-        let Self { path, method, status_code } = self;
+        let Self { path, method, status_code, headers } = self;
         Arc::new(move |req: Request<Body>| {
             let cloned_path = path.clone();
             let cloned_method = method.clone();
+            let cloned_headers = headers.clone();
             Box::pin(async move {
-                if req.uri().path().eq(cloned_path.as_str()) && req.method().eq(&cloned_method) {
+                if req.uri().path().eq(cloned_path.as_str()) && req.method().eq(&cloned_method)
+                && Self::contains_headers(req.headers(), &cloned_headers) {
                     Ok(hyper::Response::builder().status(status_code).body(Body::empty()).unwrap())
                 } else {
                     Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
                 }
             })
         })
+    }
+
+    fn contains_headers(headers_reference: &HeaderMap, headers_to_be_contained: &HeaderMap) -> bool {
+        for (header, value) in headers_to_be_contained {
+            if !headers_reference.get(header).eq(&Some(value)) {
+                return false;
+            }
+        }
+        true
     }
 }
 
