@@ -31,11 +31,11 @@ fn release_port(port: u16) {
 }
 
 #[allow(dead_code)]
-struct HttpTestContext {
-    client: Client<HttpConnector<GaiResolver>, Body>,
+pub struct HttpTestContext {
+    pub client: Client<HttpConnector<GaiResolver>, Body>,
+    pub port: u16,
     server_handler: JoinHandle<Result<(), hyper::Error>>,
     sender: Sender<()>,
-    port: u16,
     handlers: Arc<Mutex<Queue<HandlerCallback>>>
 }
 
@@ -58,9 +58,7 @@ pub async fn run_service(addr: SocketAddr, rx: Receiver<()>,
             }))
         }
     });
-    let server = Server::bind(&addr).serve(new_service);
-
-    server.with_graceful_shutdown(async { rx.await.ok(); })
+    Server::bind(&addr).serve(new_service).with_graceful_shutdown(async { rx.await.ok(); })
 }
 
 #[async_trait::async_trait]
