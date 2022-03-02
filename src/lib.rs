@@ -30,6 +30,7 @@ fn release_port(port: u16) {
     PORTS.lock().unwrap().push(port)
 }
 
+#[allow(dead_code)]
 struct HttpTestContext {
     client: Client<HttpConnector<GaiResolver>, Body>,
     server_handler: JoinHandle<Result<(), hyper::Error>>,

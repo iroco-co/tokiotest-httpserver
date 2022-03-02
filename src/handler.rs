@@ -15,6 +15,7 @@ pub struct HandlerBuilder {
     status_code: StatusCode
 }
 
+#[allow(dead_code)]
 impl HandlerBuilder {
     pub fn new(path: &str) -> HandlerBuilder {
         HandlerBuilder {
