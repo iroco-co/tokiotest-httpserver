@@ -1,4 +1,4 @@
-mod handler;
+pub mod handler;
 
 use std::collections::BinaryHeap;
 use std::future::Future;
@@ -25,7 +25,6 @@ lazy_static! {
 fn take_port() -> u16 {
     PORTS.lock().unwrap().pop().unwrap()
 }
-
 fn release_port(port: u16) {
     PORTS.lock().unwrap().push(port)
 }
@@ -36,7 +35,13 @@ pub struct HttpTestContext {
     pub port: u16,
     server_handler: JoinHandle<Result<(), hyper::Error>>,
     sender: Sender<()>,
-    handlers: Arc<Mutex<Queue<HandlerCallback>>>
+    pub handlers: Arc<Mutex<Queue<HandlerCallback>>>
+}
+
+impl HttpTestContext {
+    pub fn add(&mut self, handler: HandlerCallback) {
+        self.handlers.lock().unwrap().add(handler).unwrap();
+    }
 }
 
 pub async fn run_service(addr: SocketAddr, rx: Receiver<()>,
@@ -91,7 +96,6 @@ mod test {
     use hyper::{Uri, StatusCode, Method, Request, Body, HeaderMap};
     use crate::{HttpTestContext};
     use test_context::test_context;
-    use queues::IsQueue;
     use crate::handler::HandlerBuilder;
 
     #[test_context(HttpTestContext)]
@@ -106,7 +110,7 @@ mod test {
     #[tokio::test]
     async fn test_get_respond_404(ctx: &mut HttpTestContext) {
         let uri = format!("http://{}:{}/unknown", "localhost", ctx.port).parse::<Uri>().unwrap();
-        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/unknown").status_code(StatusCode::NOT_FOUND).build()).unwrap();
+        ctx.add(HandlerBuilder::new("/unknown").status_code(StatusCode::NOT_FOUND).build());
 
         let resp = ctx.client.get(uri).await.unwrap();
 
@@ -117,7 +121,7 @@ mod test {
     #[tokio::test]
     async fn test_get_endpoint(ctx: &mut HttpTestContext) {
         let uri = format!("http://{}:{}/foo", "localhost", ctx.port).parse::<Uri>().unwrap();
-        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/foo").status_code(StatusCode::OK).build()).unwrap();
+        ctx.add(HandlerBuilder::new("/foo").status_code(StatusCode::OK).build());
 
         let resp = ctx.client.get(uri.clone()).await.unwrap();
         assert_eq!(200, resp.status());
@@ -132,8 +136,8 @@ mod test {
         let uri = format!("http://{}:{}/headers", "localhost", ctx.port).parse::<Uri>().unwrap();
         let mut headers = HeaderMap::new();
         headers.append("foo", "bar".parse().unwrap());
-        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers.clone()).build()).unwrap();
-        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers).build()).unwrap();
+        ctx.add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers.clone()).build());
+        ctx.add(HandlerBuilder::new("/headers").status_code(StatusCode::OK).headers(headers).build());
 
         let resp = ctx.client.get(uri.clone()).await.unwrap();
         assert_eq!(500, resp.status());
@@ -147,9 +151,9 @@ mod test {
     #[tokio::test]
     async fn test_post_endpoint(ctx: &mut HttpTestContext) {
         let uri = format!("http://{}:{}/bar", "localhost", ctx.port).parse::<Uri>().unwrap();
-        ctx.handlers.lock().unwrap().add(HandlerBuilder::new("/bar")
+        ctx.add(HandlerBuilder::new("/bar")
             .status_code(StatusCode::OK)
-            .method(Method::POST).build()).unwrap();
+            .method(Method::POST).build());
 
         let req = Request::builder()
             .method(Method::POST)
