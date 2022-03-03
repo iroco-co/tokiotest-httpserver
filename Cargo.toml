@@ -21,3 +21,6 @@ tokio-test = "*"
 test-context = "*"
 lazy_static = "1.4"
 queues = "1.1"
+
+[dev-dependencies]
+serial_test = "*"
