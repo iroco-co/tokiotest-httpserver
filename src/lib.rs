@@ -22,10 +22,10 @@ lazy_static! {
     static ref PORTS: Mutex<BinaryHeap<u16>> = Mutex::new(BinaryHeap::from((12300u16..12400u16).collect::<Vec<u16>>()));
 }
 
-fn take_port() -> u16 {
+pub fn take_port() -> u16 {
     PORTS.lock().unwrap().pop().unwrap()
 }
-fn release_port(port: u16) {
+pub fn release_port(port: u16) {
     PORTS.lock().unwrap().push(port)
 }
 
