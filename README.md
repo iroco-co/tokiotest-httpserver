@@ -6,7 +6,12 @@ A small test server utility to run http request against.
 
 The test context instantiates a new server with a random port between 12300 and 12400. The test will use this port : 
 
-```rust
+```rust,no_run
+use test_context::{AsyncTestContext, test_context};
+use hyper::{Uri, StatusCode, Client};
+use tokiotest_httpserver::handler::{HandlerBuilder};
+use tokiotest_httpserver::HttpTestContext;
+
 #[test_context(HttpTestContext)]
 #[tokio::test]
 async fn test_get_respond_200(ctx: &mut HttpTestContext) {
