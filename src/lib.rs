@@ -23,9 +23,14 @@ lazy_static! {
     static ref PORTS: Mutex<BinaryHeap<u16>> = Mutex::new(BinaryHeap::from((12300u16..12400u16).collect::<Vec<u16>>()));
 }
 
+/// function that can be called to avoid port collision when tests have to open a listen port
+/// this function takes a port in the `BinaryHeap PORTS`
 pub fn take_port() -> u16 {
     PORTS.lock().unwrap().pop().unwrap()
 }
+
+/// function that can be called to release port after having taken it.
+/// this function pushes the given port in the `BinaryHeap PORTS`
 pub fn release_port(port: u16) {
     PORTS.lock().unwrap().push(port)
 }
