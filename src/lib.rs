@@ -103,10 +103,10 @@ impl AsyncTestContext for HttpTestContext {
 
 #[cfg(test)]
 mod test {
-    use hyper::{StatusCode, Method, Request, Body, HeaderMap, Client};
-    use crate::{HttpTestContext};
-    use test_context::test_context;
     use crate::handler::HandlerBuilder;
+    use crate::HttpTestContext;
+    use hyper::{body::HttpBody, Body, Client, HeaderMap, Method, Request, StatusCode};
+    use test_context::test_context;
 
     #[test_context(HttpTestContext)]
     #[tokio::test]
@@ -151,6 +151,23 @@ mod test {
         let req = Request::builder().method(Method::GET).uri(ctx.uri("/headers")).header("foo", "bar").body(Body::empty()).unwrap();
         let resp = Client::new().request(req).await.unwrap();
         assert_eq!(200, resp.status());
+    }
+
+    #[test_context(HttpTestContext)]
+    #[tokio::test]
+    async fn test_get_with_response(ctx: &mut HttpTestContext) {
+        ctx.add(
+            HandlerBuilder::new("/response")
+                .status_code(StatusCode::OK)
+                .response("Hello test".into())
+                .build(),
+        );
+
+        let resp = Client::new().get(ctx.uri("/response")).await.unwrap();
+        assert_eq!(200, resp.status());
+
+        let body = resp.into_body().data().await.unwrap().unwrap();
+        assert_eq!("Hello test", body);
     }
 
     #[test_context(HttpTestContext)]

@@ -12,7 +12,8 @@ pub struct HandlerBuilder {
     path: String,
     method: Method,
     headers: HeaderMap,
-    status_code: StatusCode
+    status_code: StatusCode,
+    response: Vec<u8>,
 }
 
 #[allow(dead_code)]
@@ -22,7 +23,8 @@ impl HandlerBuilder {
             path: String::from(path),
             method: Method::GET,
             headers: HeaderMap::new(),
-            status_code: StatusCode::INTERNAL_SERVER_ERROR
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            response: Vec::new(),
         }
     }
 
@@ -41,16 +43,33 @@ impl HandlerBuilder {
         self
     }
 
+    pub fn response(mut self, response: Vec<u8>) -> HandlerBuilder {
+        self.response = response;
+        self
+    }
+
     pub fn build(self) -> HandlerCallback {
-        let Self { path, method, status_code, headers } = self;
+        let Self {
+            path,
+            method,
+            status_code,
+            headers,
+            response,
+        } = self;
         Arc::new(move |req: Request<Body>| {
             let cloned_path = path.clone();
             let cloned_method = method.clone();
             let cloned_headers = headers.clone();
+            let cloned_response = response.clone();
             Box::pin(async move {
-                if req.uri().path().eq(cloned_path.as_str()) && req.method().eq(&cloned_method)
-                && Self::contains_headers(req.headers(), &cloned_headers) {
-                    Ok(hyper::Response::builder().status(status_code).body(Body::empty()).unwrap())
+                if req.uri().path().eq(cloned_path.as_str())
+                    && req.method().eq(&cloned_method)
+                    && Self::contains_headers(req.headers(), &cloned_headers)
+                {
+                    Ok(hyper::Response::builder()
+                        .status(status_code)
+                        .body(cloned_response.into())
+                        .unwrap())
                 } else {
                     Ok(hyper::Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Body::empty()).unwrap())
                 }
